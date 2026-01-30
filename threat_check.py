@@ -17,20 +17,17 @@ def identify_type(target: str) -> str:
     """
     target = target.strip()
     
-    # 1. Check IP
     try:
         ipaddress.ip_address(target)
         return 'ip'
     except ValueError:
         pass
     
-    # 2. Check Hash (MD5, SHA1, SHA256)
     if re.fullmatch(r"^[a-fA-F0-9]{32}$", target): return 'hash'    # MD5
     if re.fullmatch(r"^[a-fA-F0-9]{40}$", target): return 'hash'    # SHA1
     if re.fullmatch(r"^[a-fA-F0-9]{64}$", target): return 'hash'    # SHA256
     
-    # 3. Check Domain
-    # Simple regex for domain: something.something (no spaces)
+    # Simple check for domain format
     if re.match(r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$", target):
         return 'domain'
         
@@ -55,28 +52,21 @@ def main():
     client = ThreatIntelClient()
     report = ReportGenerator(target, lang=args.lang)
     
-    # Simple spinner for UX (if rich is available, we can do even better, but let's keep it simple for now)
-    # Actually, let's use rich Console status since we have it
     from rich.console import Console
     console = Console()
     
     with console.status(f"[bold green]Scanning {target} ({target_type.upper()})...[/]"):
         
-        # --- Execution Matrix ---
-        
-        # VirusTotal (All types)
         if client.services['virustotal']:
             vt_type = 'file' if target_type == 'hash' else target_type
             result = client.query_virustotal(target, vt_type)
             report.add_result('virustotal', result)
             
-        # AlienVault OTX (All types)
         if client.services['alienvault']:
             otx_type = 'file' if target_type == 'hash' else target_type
             result = client.query_alienvault(target, otx_type)
             report.add_result('alienvault', result)
             
-        # IP Specific Services
         if target_type == 'ip':
             if client.services['abuseipdb']:
                 report.add_result('abuseipdb', client.query_abuseipdb(target))
@@ -87,7 +77,6 @@ def main():
             if client.services['greynoise']:
                 report.add_result('greynoise', client.query_greynoise(target))
                 
-        # Domain Specific Services
         if target_type == 'domain':
             if client.services['urlscan']:
                 report.add_result('urlscan', client.query_urlscan(target))

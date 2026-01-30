@@ -16,7 +16,8 @@ class ReportGenerator:
     Supports printable reports and dashboard views.
     """
     
-    # Localization Dictionary
+    
+
     TRANS = {
         'pt': {
             'title': "RELATÓRIO DE INTELIGÊNCIA DE AMEAÇAS",
@@ -147,7 +148,8 @@ class ReportGenerator:
         }
     }
     
-    # Basic Country Code Mapping (Top common ones to avoid external dependency)
+    
+
     COUNTRY_MAP = {
         'US': 'United States', 'CN': 'China', 'RU': 'Russia', 'BR': 'Brazil', 
         'DE': 'Germany', 'GB': 'United Kingdom', 'FR': 'France', 'NL': 'Netherlands',
@@ -182,7 +184,7 @@ class ReportGenerator:
         self.results[service_name] = data
         self.total_sources += 1
         
-        # Simple Risk Calculation (Heuristic)
+        
         is_risky = False
         if "error" in data:
             return
@@ -223,7 +225,9 @@ class ReportGenerator:
         if "error" in data:
             return f"[red]Error: {data['error']}[/]"
 
-        # Handle API Client Meta Errors (Refactored)
+        if "error" in data:
+            return f"[red]Error: {data['error']}[/]"
+
         if "_meta_error" in data:
             err = data["_meta_error"]
             msg = data["_meta_msg"]
@@ -408,7 +412,6 @@ class ReportGenerator:
     def print_to_console(self):
         """Prints the report in the requested 'Printable' format."""
         
-        # 1. Header
         header_text = f"""
 [bold]{self.t['title']}[/]
 [dim]{'-'*60}[/]
@@ -420,11 +423,12 @@ class ReportGenerator:
         self.console.print(header_text.strip())
         self.console.print()
 
-        # 2. Verdict
+        self.console.print(header_text.strip())
+        self.console.print()
+
         self.console.print(self._get_verdict_panel())
         self.console.print()
 
-        # 3. Services
         for service, data in self.results.items():
             icon_map = {
                 'virustotal': '🦠',
@@ -443,7 +447,10 @@ class ReportGenerator:
             self.console.print(content)
             self.console.print()
 
-        # 4. Footer
+            self.console.print(f"[bold]{title}[/]")
+            self.console.print(content)
+            self.console.print()
+
         self.console.print(f"[dim]{'-'*60}[/]")
         self.console.print(f"[dim]{self.t['end_report']}[/]")
 
@@ -451,17 +458,19 @@ class ReportGenerator:
         """Prints the report in a Dashboard grid layout."""
         self.console.print()
         
-        # Header Panel
+        """Prints the report in a Dashboard grid layout."""
+        self.console.print()
+        
         header_content = f"[bold cyan]{self.target}[/] [dim]({self.timestamp})[/]"
         header_panel = Panel(Align.center(header_content), title=self.t['title'], border_style="blue")
         
-        # Verdict Panel
+        header_panel = Panel(Align.center(header_content), title=self.t['title'], border_style="blue")
+        
         verdict_panel = self._get_verdict_panel()
         
-        # Service Panels
         panels = []
         for service, data in self.results.items():
-            # Hide Forbidden errors (e.g. Quota exceeded) as requested
+        for service, data in self.results.items():
             if isinstance(data, dict) and data.get("_meta_error") == "forbidden":
                 continue
                 
@@ -476,7 +485,8 @@ class ReportGenerator:
             
             panels.append(Panel(content, title=f"[bold]{service.upper()}[/]", border_style=border_color))
 
-        # Layout Construction
+            panels.append(Panel(content, title=f"[bold]{service.upper()}[/]", border_style=border_color))
+
         self.console.print(header_panel)
         self.console.print(verdict_panel)
         self.console.print(Columns(panels, expand=True))

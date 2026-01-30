@@ -3,7 +3,6 @@ import requests
 import logging
 from typing import Dict, Any, Optional
 
-# Configure logging (can be adjusted by the main script)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -47,11 +46,9 @@ class ThreatIntelClient:
                 logger.debug(f"{service} disabled (missing {env_var}).")
 
     def _safe_request(self, method: str, url: str, **kwargs) -> Optional[Dict[str, Any]]:
-        """Helper to perform requests with error handling."""
         try:
             response = requests.request(method, url, timeout=10, **kwargs)
             
-            # Special handling for Common Status Codes
             if response.status_code == 404:
                 return {"_meta_error": "not_found", "_meta_msg": "Not found in database"}
             if response.status_code == 403:
