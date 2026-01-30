@@ -412,6 +412,7 @@ class ReportGenerator:
     def print_to_console(self):
         """Prints the report in the requested 'Printable' format."""
         
+        # 1. Header
         header_text = f"""
 [bold]{self.t['title']}[/]
 [dim]{'-'*60}[/]
@@ -423,12 +424,11 @@ class ReportGenerator:
         self.console.print(header_text.strip())
         self.console.print()
 
-        self.console.print(header_text.strip())
-        self.console.print()
-
+        # 2. Verdict
         self.console.print(self._get_verdict_panel())
         self.console.print()
 
+        # 3. Services
         for service, data in self.results.items():
             icon_map = {
                 'virustotal': '🦠',
@@ -447,10 +447,7 @@ class ReportGenerator:
             self.console.print(content)
             self.console.print()
 
-            self.console.print(f"[bold]{title}[/]")
-            self.console.print(content)
-            self.console.print()
-
+        # 4. Footer
         self.console.print(f"[dim]{'-'*60}[/]")
         self.console.print(f"[dim]{self.t['end_report']}[/]")
 
@@ -458,19 +455,17 @@ class ReportGenerator:
         """Prints the report in a Dashboard grid layout."""
         self.console.print()
         
-        """Prints the report in a Dashboard grid layout."""
-        self.console.print()
-        
+        # Header Panel
         header_content = f"[bold cyan]{self.target}[/] [dim]({self.timestamp})[/]"
         header_panel = Panel(Align.center(header_content), title=self.t['title'], border_style="blue")
         
-        header_panel = Panel(Align.center(header_content), title=self.t['title'], border_style="blue")
-        
+        # Verdict Panel
         verdict_panel = self._get_verdict_panel()
         
+        # Service Panels
         panels = []
         for service, data in self.results.items():
-        for service, data in self.results.items():
+            # Hide Forbidden errors (e.g. Quota exceeded) as requested
             if isinstance(data, dict) and data.get("_meta_error") == "forbidden":
                 continue
                 
@@ -485,8 +480,7 @@ class ReportGenerator:
             
             panels.append(Panel(content, title=f"[bold]{service.upper()}[/]", border_style=border_color))
 
-            panels.append(Panel(content, title=f"[bold]{service.upper()}[/]", border_style=border_color))
-
+        # Layout Construction
         self.console.print(header_panel)
         self.console.print(verdict_panel)
         self.console.print(Columns(panels, expand=True))
