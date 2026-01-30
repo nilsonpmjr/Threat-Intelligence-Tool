@@ -3,8 +3,9 @@ import requests
 import logging
 from typing import Dict, Any, Optional
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class ThreatIntelClient:
     """

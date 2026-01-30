@@ -1,51 +1,39 @@
 #!/usr/bin/env python3
 import sys
 import argparse
-import re
-import ipaddress
 import logging
+from rich.console import Console
 from api_client import ThreatIntelClient
 from report_generator import ReportGenerator
+from logging_config import setup_logging, get_logger
+from validators import validate_target, ValidationError
 
-# Configure Logging
-logging.basicConfig(level=logging.ERROR, format='%(message)s')
-logger = logging.getLogger("ThreatCheck")
-
-def identify_type(target: str) -> str:
-    """
-    Identifies the type of the target: 'ip', 'domain', 'hash', or 'unknown'.
-    """
-    target = target.strip()
-    
-    try:
-        ipaddress.ip_address(target)
-        return 'ip'
-    except ValueError:
-        pass
-    
-    if re.fullmatch(r"^[a-fA-F0-9]{32}$", target): return 'hash'    # MD5
-    if re.fullmatch(r"^[a-fA-F0-9]{40}$", target): return 'hash'    # SHA1
-    if re.fullmatch(r"^[a-fA-F0-9]{64}$", target): return 'hash'    # SHA256
-    
-    # Simple check for domain format
-    if re.match(r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$", target):
-        return 'domain'
-        
-    return 'unknown'
+logger = get_logger("ThreatCheck")
 
 def main():
+    setup_logging(level="INFO")
+    
     parser = argparse.ArgumentParser(description="Threat Intelligence Aggregator")
     parser.add_argument("target", help="IP address, Domain, or File Hash")
     parser.add_argument("--lang", default="pt", help="Language for the report (default: pt)")
     parser.add_argument("--dashboard", action="store_true", help="Show results in a Dashboard view")
     
     args = parser.parse_args()
-    target = args.target.strip()
-    target_type = identify_type(target)
     
-    if target_type == 'unknown':
-        print(f"Error: Could not identify the type of target '{target}'.")
-        print("Supported types: IPv4/IPv6, Domain, File Hash (MD5/SHA1/SHA256)")
+    try:
+        validated = validate_target(args.target)
+        target = validated.sanitized
+        target_type = validated.target_type
+        
+        logger.info(f"Target validated: {target} ({target_type})")
+        
+    except ValidationError as e:
+        console = Console()
+        console.print(f"[red]❌ Validation Error:[/] {e}")
+        console.print("\n[yellow]Supported types:[/]")
+        console.print("  • IPv4/IPv6 addresses")
+        console.print("  • Domain names")
+        console.print("  • File hashes (MD5, SHA1, SHA256)")
         sys.exit(1)
         
     # Initialize components

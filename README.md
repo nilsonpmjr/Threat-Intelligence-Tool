@@ -1,39 +1,37 @@
-# Threat Intelligence Tool 🛡️
+# 🛡️ Threat Intelligence Aggregator
 
-A comprehensive, modular CLI tool to query multiple threat intelligence APIs (VirusTotal, AbuseIPDB, Shodan, AlienVault OTX, GreyNoise, UrlScan.io) and present a unified, beautiful dashboard.
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-![Dashboard Preview](https://via.placeholder.com/800x400?text=Dashboard+Preview) 
-*(Screenshots coming soon)*
+A powerful and efficient tool to aggregate threat intelligence from multiple sources, including VirusTotal, AbuseIPDB, Shodan, AlienVault OTX, GreyNoise, and URLScan.
 
-## 🚀 Features
+## ✨ Features
 
-*   **Multi-Source Intelligence**: Aggregates data from 6+ top-tier security APIs.
-*   **Smart Detection**: Automatically detects if the target is an IP, Domain, or File Hash.
-*   **Rich Dashboard**: Visual grid layout with color-coded risk verdicts.
-*   **Deep Enrichment**:
-    *   **VirusTotal**: Community votes, tags, filenames, network CIDR.
-    *   **Shodan**: Open ports, hostnames, vulnerabilities.
-    *   **GreyNoise**: RIOT (benign) status, actor/bot identification.
-    *   **AlienVault**: Threat pulses and community reports.
-*   **Risk Scoring**: Intelligent verdict system (Safe / Suspicious / High Risk) based on thresholds.
-*   **Localization**: Full support for **Portuguese (PT-BR)** and English (EN).
+- 🚀 **Parallel Queries** - Fast results (Soon with asyncio)
+- 🎨 **Rich Interface** - Elegant visualization with Rich library
+- 🌍 **Multi-language Support** - Portuguese (PT-BR) and English (EN)
+- 🔒 **Robust Validation** - Protection against malicious inputs
+- 📊 **Multiple Views** - Console Report and Dashboard Grid
 
-## 🛠️ Installation
+## 📋 Requirements
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/nilsonpmjr/Threat-Intelligence-Tool.git
-    cd Threat-Intelligence-Tool
-    ```
+- Python 3.9+
+- `pip install -r requirements.txt`
 
-2.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+## 🚀 Installation
 
-## 🔑 Configuration
+```bash
+# Clone the repository
+git clone https://github.com/nilsonpmjr/Threat-Intelligence-Tool.git
+cd Threat-Intelligence-Tool
 
-Set your API keys as environment variables. You can add these to your `.bashrc`, `.zshrc`, or run them in your session:
+# Install dependencies
+pip install -r requirements.txt
+```
+
+## ⚙️ Configuration
+
+Set your API keys as environment variables in your shell or `.bashrc`:
 
 ```bash
 export VT_API_KEY='your_key'
@@ -46,36 +44,66 @@ export URLSCAN_API_KEY='your_key'
 
 *Note: The tool gracefully handles missing keys by skipping those services.*
 
-## 💻 Usage
+## 📖 Usage
 
-**Basic Scan (Dashboard Mode):**
+### Basic Usage
+
 ```bash
+# Analyze an IP
+./threat_check.py 8.8.8.8
+
+# Analyze a domain
+./threat_check.py google.com
+
+# Analyze a file hash
+./threat_check.py 44d88612fea8a8f36de82e1278abb02f
+```
+
+### Advanced Options
+
+```bash
+# Specify language (pt or en)
+./threat_check.py 8.8.8.8 --lang en
+
+# Dashboard Mode (Grid View)
 ./threat_check.py 8.8.8.8 --dashboard
 ```
 
-**Scan a Domain:**
-```bash
-./threat_check.py google.com --dashboard
+## 📊 Output Examples
+
+### Console Mode (Default)
+
+```
+RELATÓRIO DE INTELIGÊNCIA DE AMEAÇAS
+────────────────────────────────────────────────────────
+🎯 Alvo:    8.8.8.8
+🔍 Tipo:    IP
+🕒 Data/Hora: 2026-01-29 20:30:45 BRT
+────────────────────────────────────────────────────────
+
+╭─────────────────────────────────────────────────────────╮
+│              🛡️  VEREDITO: SEGURO (0/6)                │
+╰─────────────────────────────────────────────────────────╯
 ```
 
-**Scan a File Hash:**
-```bash
-./threat_check.py 44d88612fea8a8f36de82e1278abb02f --dashboard
-```
+### Dashboard Mode
 
-**Plain Text Output (Good for logs):**
-```bash
-./threat_check.py 1.1.1.1
 ```
+╭──────────────────── THREAT INTELLIGENCE REPORT ────────────────────╮
+│                    8.8.8.8 (2026-01-29 20:30:45)                   │
+╰────────────────────────────────────────────────────────────────────╯
 
-**Switch Language to English:**
-```bash
-./threat_check.py 1.1.1.1 --lang en
+┌─────────────────┬─────────────────┬─────────────────┐
+│  VIRUSTOTAL     │   ABUSEIPDB     │    SHODAN       │
+├─────────────────┼─────────────────┼─────────────────┤
+│ Score: 0/93     │ Confidence: 0%  │ OS: Linux       │
+│ Safe            │ Reports: 0      │ Ports: 53, 443  │
+└─────────────────┴─────────────────┴─────────────────┘
 ```
 
 ## 🤝 Contributing
 
-Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
+Pull requests are welcome! Please read our Contributing Guide.
 
 ## 📝 License
 

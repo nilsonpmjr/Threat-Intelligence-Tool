@@ -9,6 +9,9 @@ from rich.text import Text
 from rich import box
 from rich.align import Align
 from rich.columns import Columns
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class ReportGenerator:
     """
@@ -41,12 +44,12 @@ class ReportGenerator:
             'usage_type': "Tipo de Uso",
             'status': "Status",
             'class': "Classe",
+            'class': "Classe",
             'ports': "Portas Abertas",
             'os': "Sistema Operacional",
             'vulns': "Vulnerabilidades",
             'pulses': "Pulsos de Ameaça",
             'total_scans': "Total de Escaneamentos",
-            'malicious': "Malicioso",
             'malicious': "Malicioso",
             'country': "País",
             'city': "Cidade",
@@ -225,8 +228,7 @@ class ReportGenerator:
         if "error" in data:
             return f"[red]Error: {data['error']}[/]"
 
-        if "error" in data:
-            return f"[red]Error: {data['error']}[/]"
+
 
         if "_meta_error" in data:
             err = data["_meta_error"]
@@ -290,7 +292,9 @@ class ReportGenerator:
                         desc = self._get_tag_desc(tag)
                         if desc:
                              lines.append(f"  [dim italic]↳ {tag}: {desc}[/]")
-            except: lines.append(str(data))
+            except Exception as e:
+                logger.error(f"Error parsing VirusTotal data: {e}")
+                lines.append(f"[yellow]Error parsing data[/]")
 
         elif service == 'abuseipdb':
             try:
@@ -313,7 +317,9 @@ class ReportGenerator:
                 if 'countryCode' in d: lines.append(f"• {self.t['country']}: {self._get_country_name(d['countryCode'])}")
                 if 'isp' in d: lines.append(f"• {self.t['isp']}: {d['isp']}")
                 if 'domain' in d: lines.append(f"• {self.t['domain']}: {d['domain']}")
-            except: lines.append(str(data))
+            except Exception as e:
+                logger.error(f"Error parsing AbuseIPDB data: {e}")
+                lines.append(f"[yellow]Error parsing data[/]")
 
         elif service == 'shodan':
             try:
@@ -340,7 +346,9 @@ class ReportGenerator:
                 lines.append(f"• {self.t['ports']}: {', '.join(map(str, ports)) if ports else 'None'}")
                 if 'vulns' in data:
                     lines.append(f"• {self.t['vulns']}: [red]{len(data['vulns'])} detected[/]")
-            except: lines.append(str(data))
+            except Exception as e:
+                logger.error(f"Error parsing Shodan data: {e}")
+                lines.append(f"[yellow]Error parsing data[/]")
 
         elif service == 'alienvault':
             try:
@@ -358,7 +366,9 @@ class ReportGenerator:
                 
                 if 'country_name' in data: lines.append(f"• {self.t['country']}: {data.get('country_name')}")
                 if 'city' in data: lines.append(f"• {self.t['city']}: {data.get('city')}")
-            except: lines.append(str(data))
+            except Exception as e:
+                logger.error(f"Error parsing AlienVault data: {e}")
+                lines.append(f"[yellow]Error parsing data[/]")
             
         elif service == 'greynoise':
             try:
@@ -382,7 +392,9 @@ class ReportGenerator:
                 last_seen = data.get('last_seen')
                 if last_seen: lines.append(f"• {self.t['last_seen']}: {last_seen}")
 
-            except: lines.append(str(data))
+            except Exception as e:
+                logger.error(f"Error parsing GreyNoise data: {e}")
+                lines.append(f"[yellow]Error parsing data[/]")
             
         elif service == 'urlscan':
              try:
@@ -405,7 +417,9 @@ class ReportGenerator:
                             lines.append(f"• {self.t['last_analysis']}: {dt}")
                          except: pass
                          
-             except: lines.append(str(data))
+             except Exception as e:
+                logger.error(f"Error parsing UrlScan data: {e}")
+                lines.append(f"[yellow]Error parsing data[/]")
 
         return "\n".join(lines)
 
