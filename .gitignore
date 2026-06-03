@@ -1,17 +1,6 @@
 # Local secrets and environment files
 .env
 .env.local
-.env.*.local
-.env.production
-.env.staging
-
-# TLS certificates and private keys
-*.pem
-*.key
-*.p12
-*.pfx
-*.crt
-*.cer
 
 # Python caches and virtual environments
 __pycache__/
@@ -29,10 +18,6 @@ dist/
 build/
 coverage/
 
-# SAST / security scan reports
-bandit-report.json
-**/bandit-report.json
-
 # Logs and temporary outputs
 *.log
 tmp-*.json
@@ -43,5 +28,6 @@ docker_build.log
 .vscode/
 Threat-Intelligence-Tool.code-workspace
 .omx/
-.claude/
-.planning/
+
+# Legacy frontend (archived, not part of the active build)
+web-legacy/
