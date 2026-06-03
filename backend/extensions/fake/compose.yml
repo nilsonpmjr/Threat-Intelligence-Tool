@@ -1,0 +1,22 @@
+# Fake extension — minimal compose to prove ExtensionManager handles
+# arbitrary trivial extensions. Just an nginx static server returning a
+# canned message; no real workload, no host port exposed.
+
+services:
+  fake-probe:
+    image: nginx:alpine
+    container_name: fake-probe
+    restart: unless-stopped
+    networks:
+      - vantage_internal
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+networks:
+  vantage_internal:
+    external: true
+    name: threat-intelligence-tool_vantage_internal

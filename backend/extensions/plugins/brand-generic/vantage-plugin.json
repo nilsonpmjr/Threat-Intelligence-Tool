@@ -1,0 +1,21 @@
+{
+  "key": "brand-generic",
+  "name": "Generic Brand Pack",
+  "version": "1.0.0",
+  "license": "AGPL-3.0-or-later",
+  "author": "VANTAGE Core",
+  "kind": "brand_pack",
+  "compatibleCore": "1.x",
+  "builtin": true,
+  "distributionTier": "core",
+  "repositoryVisibility": "public",
+  "updateChannel": "bundled",
+  "ownershipBoundary": "core_team",
+  "source": "core",
+  "brandKey": "generic",
+  "description": "Built-in neutral branding pack for downstream deployments.",
+  "capabilities": ["dark", "light"],
+  "permissions": [],
+  "publicAssetRoot": "/branding/generic",
+  "sourceOfTruthPath": "web/src/branding/generic"
+}

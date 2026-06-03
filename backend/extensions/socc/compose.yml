@@ -1,0 +1,81 @@
+# SOC Copilot extension — docker compose file consumed by the Vantage
+# `ExtensionManager` (backend/services/extensions/manager.py). Profile-less:
+# the manager invokes `docker compose -f <this> up -d` via the
+# docker-socket-proxy when an admin clicks Install in /extensions.
+#
+# Manual activation (without ExtensionManager) for dev/debug:
+#
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f backend/extensions/socc/compose.yml \
+#     up -d
+#
+# Network `vantage_internal` is the bridge defined in the root compose
+# — the Vantage backend reaches the plugin via DNS name `socc-copilot`
+# over the internal network; nothing is exposed to the host
+# (PRD §Integration Points).
+#
+# Image policy:
+#   - During dev, `socc-plugin:dev` is built locally via
+#     `cd scratch/socc-plugin && docker compose build`.
+#   - In production, the manifest will pin a digest from
+#     ghcr.io/nilsonpmjr/socc-plugin once published; the installer
+#     refuses `:latest` (PRD §Hardening transversal).
+#
+# Secrets (`SOCC_MASTER_KEY`, `SOCC_INTERNAL_SECRET`) are 32-byte hex
+# strings. The Vantage `.env` carries them today; Fase 4 generates
+# them via `random_bytes_base64` on first install and stores them in
+# Vantage's secret store.
+
+services:
+  socc-copilot:
+    image: socc-plugin:dev
+    container_name: socc-copilot
+    restart: unless-stopped
+    environment:
+      PORT: 7070
+      MONGO_URI: mongodb://socc-mongo:27017
+      MONGO_DB: socc_plugin
+      SOCC_INTERNAL_SECRET: ${SOCC_INTERNAL_SECRET:?set SOCC_INTERNAL_SECRET in Vantage .env}
+      SOCC_MASTER_KEY: ${SOCC_MASTER_KEY:?set SOCC_MASTER_KEY in Vantage .env}
+      SESSION_TTL_MS: ${SOCC_SESSION_TTL_MS:-900000}
+      MAX_CONCURRENT_SESSIONS: ${SOCC_MAX_CONCURRENT_SESSIONS:-50}
+      TURN_TIMEOUT_MS: ${SOCC_TURN_TIMEOUT_MS:-90000}
+      SOCC_ALLOW_LOCAL_PROVIDERS: ${SOCC_ALLOW_LOCAL_PROVIDERS:-false}
+      LOG_LEVEL: ${SOCC_LOG_LEVEL:-info}
+    networks:
+      - vantage_internal
+    depends_on:
+      socc-mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7070/v1/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  socc-mongo:
+    image: mongo:7
+    container_name: socc-mongo
+    restart: unless-stopped
+    volumes:
+      - socc-mongo-data:/data/db
+    networks:
+      - vantage_internal
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  socc-mongo-data:
+
+networks:
+  # External=true means the network is owned by the root compose; the
+  # overlay attaches to it instead of creating a new one.
+  vantage_internal:
+    external: true
+    name: threat-intelligence-tool_vantage_internal

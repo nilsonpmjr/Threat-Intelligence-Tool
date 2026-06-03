@@ -19,6 +19,7 @@ import API_URL from "../config";
 import { PageHeader, PageToolbar, PageToolbarGroup } from "../components/page/PageChrome";
 import { RowActionsMenu, RowPrimaryAction, type RowActionItem } from "../components/RowActions";
 import { useLanguage } from "../context/LanguageContext";
+import OrchestratedExtensions from "./extensions/Extensions";
 
 type ExtensionItem = {
   id?: string;
@@ -591,6 +592,11 @@ export default function ExtensionsCatalog() {
             </div>
           </section>
         </aside>
+      </div>
+
+      {/* Orchestrated Extensions (Phase 4) — /api/extensions contract */}
+      <div className="mt-8">
+        <OrchestratedExtensions />
       </div>
     </div>
   );

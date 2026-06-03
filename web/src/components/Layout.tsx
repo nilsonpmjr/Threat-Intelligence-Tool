@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   Key,
   Search,
+  Terminal,
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -47,6 +48,7 @@ const rootNavItems = [
   { path: "/feed", labelKey: "layout.nav.feed", fallback: "Feed", icon: Rss },
   { path: "/recon", labelKey: "layout.nav.recon", fallback: "Recon", icon: Radar },
   { path: "/watchlist", labelKey: "layout.nav.watchlist", fallback: "Watchlist", icon: Eye },
+  { path: "/socc", labelKey: "socc.nav", fallback: "SOC Copilot", icon: Terminal },
   { path: "/shift-handoff", labelKey: "layout.nav.shiftHandoff", fallback: "Shift Handoff", icon: ClipboardList },
   { path: "/dashboard", labelKey: "layout.nav.dashboard", fallback: "Dashboard", icon: LayoutDashboard },
 ];

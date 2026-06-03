@@ -2,6 +2,7 @@ import type { ElementType, ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
 type PageHeaderProps = {
+  eyebrow?: ReactNode;
   title: ReactNode;
   description?: ReactNode;
   metrics?: ReactNode;
@@ -42,6 +43,7 @@ const metricToneClasses: Record<NonNullable<PageMetricPillProps["tone"]>, string
 };
 
 export function PageHeader({
+  eyebrow,
   title,
   description,
   metrics,
@@ -56,6 +58,7 @@ export function PageHeader({
   return (
     <div className={cn("page-header page-header-compact", className)}>
       <div className={cn("page-header-copy", copyClassName)}>
+        {eyebrow ? <p className="page-eyebrow">{eyebrow}</p> : null}
         <TitleTag className="page-heading">{title}</TitleTag>
         {description ? <p className="page-subheading">{description}</p> : null}
       </div>

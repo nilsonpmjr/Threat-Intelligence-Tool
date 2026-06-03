@@ -24,8 +24,9 @@ class _InsertResult:
 
 
 class _UpdateResult:
-    def __init__(self, modified_count):
+    def __init__(self, modified_count, upserted_id=None):
         self.modified_count = modified_count
+        self.upserted_id = upserted_id
 
 
 class FakeCursor:
@@ -175,8 +176,32 @@ class FakeCollection:
             self._data.append(replacement)
 
     async def update_one(self, query, update, upsert=False):
+        # Pull $or off the query and evaluate it as a disjunction of the
+        # remaining sub-filters (each a plain equality match). Sufficient
+        # for the lock-acquisition pattern in services/extensions/manager.py.
+        or_clauses = query.pop("$or", None) if isinstance(query, dict) else None
+
+        def _matches(doc):
+            base_match = all(doc.get(k) == v for k, v in query.items())
+            if not base_match:
+                return False
+            if or_clauses is None:
+                return True
+            for clause in or_clauses:
+                # Each clause is itself an equality dict, possibly with
+                # an {"$exists": False} expression.
+                if all(_match_field(doc, k, v) for k, v in clause.items()):
+                    return True
+            return False
+
+        def _match_field(doc, key, expected):
+            if isinstance(expected, dict) and "$exists" in expected:
+                exists = key in doc
+                return exists is bool(expected["$exists"])
+            return doc.get(key) == expected
+
         for doc in self._data:
-            if all(doc.get(k) == v for k, v in query.items()):
+            if _matches(doc):
                 for op, fields in update.items():
                     if op == "$set":
                         doc.update(fields)
@@ -188,7 +213,16 @@ class FakeCollection:
                             doc.setdefault(key, []).append(value)
                 return _UpdateResult(modified_count=1)
         if upsert:
-            new_doc = dict(query)
+            # Mongo's upsert refuses to insert a duplicate _id when the
+            # query carried a literal _id but no doc matched the full
+            # filter. Match Mongo here: in that case it's a no-op for
+            # both modified_count and upserted_id (the caller treats
+            # it as "couldn't acquire").
+            if "_id" in query and any(
+                d.get("_id") == query["_id"] for d in self._data
+            ):
+                return _UpdateResult(modified_count=0, upserted_id=None)
+            new_doc = {k: v for k, v in query.items() if not isinstance(v, dict) or "$exists" not in v}
             for op, fields in update.items():
                 if op == "$set":
                     new_doc.update(fields)
@@ -199,7 +233,7 @@ class FakeCollection:
                     for key, value in fields.items():
                         new_doc[key] = [value]
             self._data.append(new_doc)
-            return _UpdateResult(modified_count=1)
+            return _UpdateResult(modified_count=0, upserted_id=new_doc.get("_id"))
         return _UpdateResult(modified_count=0)
 
     async def update_many(self, query, update):
@@ -221,6 +255,17 @@ class FakeCollection:
                 self._data.pop(i)
                 return _DeleteResult(deleted_count=1)
         return _DeleteResult(deleted_count=0)
+
+    async def delete_many(self, query):
+        kept = []
+        deleted = 0
+        for doc in self._data:
+            if all(doc.get(k) == v for k, v in query.items()):
+                deleted += 1
+            else:
+                kept.append(doc)
+        self._data = kept
+        return _DeleteResult(deleted_count=deleted)
 
     async def count_documents(self, query):
         count = 0
@@ -347,6 +392,9 @@ class FakeDB:
         self.hunting_results = FakeCollection()
         self.exposure_monitored_assets = FakeCollection()
         self.exposure_asset_groups = FakeCollection()
+        # Extensions platform (Fase 4)
+        self.extensions_state = FakeCollection()
+        self.extensions_secrets = FakeCollection()
         self.exposure_findings = FakeCollection()
         self.exposure_incidents = FakeCollection()
         self.recon_jobs = FakeCollection()

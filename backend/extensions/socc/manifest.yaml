@@ -1,0 +1,61 @@
+# SOC Copilot extension manifest.
+#
+# Source of truth: /home/nilsonpmjr/Modelos/prd/socc-copilot-plugin.md
+# (Draft, 2026-04-22), §Extensions Platform schema.
+#
+# This file is consumed by the future ExtensionManager (Fase 4 —
+# backend/services/extensions/manifest.py). Until that lands, dev
+# operators run the compose by hand:
+#
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f backend/extensions/socc/compose.yml \
+#     --profile socc up -d
+#
+# The plugin's own manifest (scratch/socc-plugin/manifest.yaml) is a
+# byte-for-byte twin — the PR that publishes @vantagesec/socc-plugin
+# to GHCR will collapse them into one source.
+
+id: socc
+name: SOC Copilot
+description: Conversational LLM assistant for threat triage.
+version: 0.1.0
+compose_file: ./compose.yml
+
+# Ops exposed in the UI. Order = order of display.
+operations: [install, start, stop, restart, logs, uninstall]
+
+# Health endpoint hit by the backend via the internal Docker network.
+health:
+  url: http://socc-copilot:7070/v1/health
+  interval_seconds: 15
+  timeout_seconds: 3
+
+# Secrets the installer generates/provisions. `random_bytes_base64` is
+# the ExtensionManager-side generator; length is in bytes.
+secrets:
+  - name: SOCC_MASTER_KEY
+    generator: random_bytes_base64
+    length: 32
+  - name: SOCC_INTERNAL_SECRET
+    generator: random_bytes_base64
+    length: 32
+
+# Pre-flight checks enforced before Install is allowed.
+requires:
+  docker_socket_proxy: true
+  disk_space_mb: 512
+  ports: []          # nothing exposed to the host
+
+# Admin-editable flags surfaced in the extension's Settings modal.
+settings:
+  - key: SOCC_ALLOW_LOCAL_PROVIDERS
+    type: boolean
+    default: false
+    label: "Permitir provedores locais (Ollama)"
+
+# Uninstall behavior. The confirm phrase must be typed literally in the
+# destructive modal.
+uninstall:
+  destroy_volumes_by_default: true
+  confirm_phrase: "uninstall socc"

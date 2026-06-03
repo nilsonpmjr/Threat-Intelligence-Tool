@@ -21,6 +21,19 @@ from threat_ingestion_runtime import start_threat_ingestion_worker
 from worker import scan_safe_targets_job, start_watchlist_worker, start_recon_scheduler
 
 from routers import auth, users, analyze, stats, admin, mfa, sessions, api_keys, batch, recon, watchlist, feed, shift_handoff, platform_credentials
+
+# SOC Copilot router is opt-in: it only mounts when the operator has
+# provisioned SOCC_INTERNAL_SECRET (i.e. the extension is installed).
+# Keeps "socc invisível até instalar" (PRD §Proposed Solution) — the
+# backend boots fine without the extension.
+try:
+    from routers import socc as socc_router  # noqa: F401
+except Exception:  # pragma: no cover - import guard only
+    socc_router = None
+
+# Generic extensions platform (Fase 4). Always-on; the catalog is
+# whatever lives in backend/extensions/ at boot.
+from routers import extensions as extensions_router
 import credential_manager
 from shift_handoff_migration import migrate_shift_handoff_incidents
 from scripts.seed_dev_users import seed_dev_users
@@ -554,6 +567,15 @@ _routers = [
     shift_handoff.router, platform_credentials.router,
     *([hunting.router] if hunting else []),
     *([exposure.router] if exposure else []),
+    # SOC Copilot proxy — present only when the extension is installed
+    # (env var SOCC_INTERNAL_SECRET non-empty).
+    *(
+        [socc_router.router]
+        if socc_router and settings.socc_internal_secret
+        else []
+    ),
+    # Generic extensions platform (catalog + lifecycle).
+    extensions_router.router,
 ]
 for _prefix in ("/api", "/api/v1"):
     for _router in _routers:

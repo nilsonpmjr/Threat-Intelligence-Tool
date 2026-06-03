@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to VANTAGE. This document provides guidelines for contributing to the project.
 
-This repository is the public core of the product. Contributions should strengthen the open core: analysis, feed, recon, watchlist, shift handoff, auth, admin surfaces, documentation, and release quality.
+This repository is the public core of the product. Contributions should strengthen the open core: analysis, feed, recon, watchlist, hunting, exposure, auth, admin surfaces, documentation, and release quality.
 
 ## Code of Conduct
 
@@ -32,7 +32,7 @@ Good fits for this repository:
 
 - bug fixes and UX improvements in the public core
 - tests, documentation, and release hardening
-- feed, recon, watchlist, shift handoff, analysis, and admin improvements that belong in the public product
+- feed, recon, hunting, watchlist, exposure, and admin improvements that belong in the public product
 
 Out of scope for this repository:
 

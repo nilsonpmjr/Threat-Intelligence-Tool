@@ -59,6 +59,7 @@ const Profile = lazy(() => import("./pages/Profile"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const AnalysisResult = lazy(() => import("./pages/AnalysisResult"));
 const BatchAnalysis = lazy(() => import("./pages/BatchAnalysis"));
+const SoccChat = lazy(() => import("./pages/socc/SoccChat"));
 const ShiftHandoff = lazy(() => import("./pages/ShiftHandoff"));
 const ShiftHandoffHistoryPage = lazy(async () => {
   const module = await import("./pages/ShiftHandoff");
@@ -131,6 +132,7 @@ export default function App() {
                 <Route path="notifications" element={suspense(<Notifications />)} />
                 <Route path="analyze/:target" element={suspense(<AnalysisResult />)} />
                 <Route path="batch" element={suspense(<BatchAnalysis />)} />
+                <Route path="socc" element={suspense(<SoccChat />)} />
                 <Route path="shift-handoff" element={suspense(<ShiftHandoff />)} />
                 <Route path="shift-handoff/history" element={suspense(<ShiftHandoffHistoryPage />)} />
                 <Route path="shift-handoff/incidents" element={suspense(<ShiftHandoffIncidentsPage />)} />

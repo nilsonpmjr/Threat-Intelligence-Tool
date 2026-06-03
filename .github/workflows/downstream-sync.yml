@@ -1,0 +1,68 @@
+name: Downstream Upstream Sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 9 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-upstream:
+    name: Sync upstream/main into this repository
+    runs-on: ubuntu-latest
+    if: ${{ vars.UPSTREAM_REPOSITORY != '' && vars.UPSTREAM_REPOSITORY != github.repository }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        env:
+          UPSTREAM_REPOSITORY: ${{ vars.UPSTREAM_REPOSITORY }}
+        run: git remote add upstream "https://github.com/${UPSTREAM_REPOSITORY}.git"
+
+      - name: Fetch upstream
+        env:
+          UPSTREAM_BRANCH: ${{ vars.UPSTREAM_BRANCH || 'main' }}
+        run: git fetch upstream "${UPSTREAM_BRANCH}"
+
+      - name: Merge upstream branch
+        id: merge
+        env:
+          UPSTREAM_BRANCH: ${{ vars.UPSTREAM_BRANCH || 'main' }}
+        run: |
+          if git merge --no-ff --no-edit "upstream/${UPSTREAM_BRANCH}"; then
+            echo "merged=true" >> "$GITHUB_OUTPUT"
+          else
+            git merge --abort || true
+            echo "Merge conflict while syncing upstream/${UPSTREAM_BRANCH}" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Create pull request
+        if: ${{ steps.merge.outputs.merged == 'true' }}
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: automation/sync-upstream
+          delete-branch: true
+          title: "chore(sync): merge upstream changes"
+          body: |
+            Automated sync PR generated from the configured upstream repository.
+
+            - Upstream repository: `${{ vars.UPSTREAM_REPOSITORY }}`
+            - Upstream branch: `${{ vars.UPSTREAM_BRANCH || 'main' }}`
+          commit-message: "chore(sync): merge upstream changes"
+          labels: |
+            automation
+            upstream-sync
+

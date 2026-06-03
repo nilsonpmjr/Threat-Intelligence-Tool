@@ -46,6 +46,23 @@ class Settings(BaseSettings):
     rate_limit_analyze: str = "30/minute"
     rate_limit_batch: str = "5/minute"
     rate_limit_recon: str = "10/hour"
+    # SOC Copilot — PRD §Security: 20 msgs/min/user.
+    rate_limit_socc_message: str = "20/minute"
+
+    # SOC Copilot extension wiring (PRD §Integration Points).
+    # The plugin runs in the same docker network and is reachable via
+    # the service DNS name; nothing is exposed to the host.
+    socc_plugin_url: str = "http://socc-copilot:7070"
+    # 32-byte hex shared secret used to mint scope=socc JWTs (TTL 60s).
+    # Empty string disables the SOC Copilot router so the rest of the
+    # backend boots even when the extension isn't installed.
+    socc_internal_secret: str = ""
+    # Admin flag — when False, /api/socc/providers refuses provider=ollama
+    # with `local_provider_disabled` even before forwarding to the plugin.
+    socc_allow_local_providers: bool = False
+    # Outbound timeout for the proxy. Streaming routes ignore this and
+    # rely on the plugin's own 90s TURN_TIMEOUT_MS (PRD §Security).
+    socc_proxy_timeout_seconds: float = 30.0
 
     # Recon Engine
     recon_cache_ttl_hours: int = 6
