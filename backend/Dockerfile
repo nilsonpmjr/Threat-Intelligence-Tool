@@ -40,13 +40,25 @@ WORKDIR /app
 ARG APP_UID=10001
 ARG APP_GID=10001
 
-# System tools required by the Recon Engine at runtime.
-# Note: theHarvester is installed via pip in the builder stage (not in apt repos).
+# System tools required at runtime:
+#   - Recon Engine: nmap, whois, traceroute, dnsutils
+#   - Extensions Platform: docker CLI (used by ExtensionManager to run
+#     `docker compose up/down/start/stop` against docker-socket-proxy)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nmap \
     whois \
     traceroute \
     dnsutils \
+    ca-certificates \
+    curl \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+       https://download.docker.com/linux/debian bookworm stable" \
+       > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid ${APP_GID} appuser \

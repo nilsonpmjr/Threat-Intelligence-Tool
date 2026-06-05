@@ -157,6 +157,41 @@ async def _proxy_json(
     return JSONResponse(status_code=resp.status_code, content=body)
 
 
+async def _proxy_multipart(
+    path: str,
+    *,
+    user: dict,
+    sid: str,
+    raw_request: Request,
+) -> JSONResponse:
+    """Forward a multipart/form-data request to the plugin verbatim.
+    Used for attachment uploads so we don't buffer the entire file in Python."""
+    token = _mint_internal_jwt(sub=user["username"], sid=sid)
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": raw_request.headers.get("content-type", ""),
+    }
+    url = _build_proxy_url(path)
+    timeout = httpx.Timeout(settings.socc_proxy_timeout_seconds)
+    try:
+        body_bytes = await raw_request.body()
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(url, headers=headers, content=body_bytes)
+    except httpx.HTTPError as exc:
+        logger.warning("socc proxy unreachable: %s", exc)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"error": ERR_SOCC_UNAVAILABLE, "message": "plugin unreachable"},
+        )
+    body: Any = None
+    if resp.content:
+        try:
+            body = resp.json()
+        except ValueError:
+            body = {"error": ERR_INTERNAL, "message": "plugin returned non-JSON"}
+    return JSONResponse(status_code=resp.status_code, content=body)
+
+
 async def _proxy_stream(
     path: str, *, user: dict, sid: Optional[str], json: dict
 ) -> StreamingResponse:
@@ -212,8 +247,13 @@ async def _proxy_stream(
 # ── schemas (kept narrow — full validation happens at the plugin) ──────
 
 
+class OAuthCallback(BaseModel):
+    code: str = Field(min_length=1)
+    state: str = Field(min_length=1)
+
+
 class CreateProvider(BaseModel):
-    provider: str = Field(pattern=r"^(anthropic|openai|gemini|ollama)$")
+    provider: str = Field(pattern=r"^(anthropic|openai|gemini|ollama|openai-compatible)$")
     label: str = Field(min_length=1, max_length=80)
     apiKey: str = Field(min_length=8)
     baseUrl: Optional[str] = None
@@ -223,15 +263,91 @@ class CreateProvider(BaseModel):
 
 class CreateSession(BaseModel):
     credentialId: str = Field(min_length=1)
+    modelOverride: Optional[str] = Field(default=None, max_length=128)
     systemPrompt: Optional[str] = Field(default=None, max_length=32_000)
+    analysisId: Optional[str] = Field(default=None, max_length=128)
+
+
+class InjectContext(BaseModel):
+    iocs: Optional[list[str]] = None
+    hashes: Optional[list[str]] = None
+    ips: Optional[list[str]] = None
+    domains: Optional[list[str]] = None
+    cves: Optional[list[str]] = None
+    rawContext: Optional[str] = Field(default=None, max_length=8_000)
+    analysisId: Optional[str] = Field(default=None, max_length=128)
 
 
 class SendMessage(BaseModel):
     text: str = Field(min_length=1, max_length=32_000)
+    attachmentIds: Optional[list[str]] = None
 
 
 class AbortBody(BaseModel):
     turnId: Optional[str] = None
+
+
+# ── OAuth ──────────────────────────────────────────────────────────────
+
+
+SUPPORTED_OAUTH_PROVIDERS = {"anthropic", "openai"}
+
+
+@router.get("/auth/{provider}/initiate")
+async def oauth_initiate(
+    request: Request,
+    provider: str,
+    current_user: dict = Depends(get_current_user),
+):
+    if provider not in SUPPORTED_OAUTH_PROVIDERS:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"error": "unsupported_provider", "supported": list(SUPPORTED_OAUTH_PROVIDERS)},
+        )
+    await _audit(
+        current_user,
+        action="socc_oauth_initiate",
+        target=provider,
+        ip=_client_ip(request),
+    )
+    return await _proxy_json("GET", f"/v1/auth/{provider}/initiate", user=current_user)
+
+
+@router.post("/auth/{provider}/callback")
+async def oauth_callback(
+    request: Request,
+    provider: str,
+    body: OAuthCallback,
+    current_user: dict = Depends(get_current_user),
+):
+    if provider not in SUPPORTED_OAUTH_PROVIDERS:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"error": "unsupported_provider"},
+        )
+    response = await _proxy_json(
+        "POST",
+        f"/v1/auth/{provider}/callback",
+        user=current_user,
+        json=body.model_dump(),
+    )
+    result = "success" if response.status_code == 201 else "failure"
+    credential_id = ""
+    if response.status_code == 201:
+        try:
+            import json as _json
+            data = _json.loads(response.body or b"{}")
+            credential_id = data.get("credentialId", "")
+        except Exception:
+            pass
+    await _audit(
+        current_user,
+        action="socc_oauth_callback",
+        target=f"{provider}:{credential_id}",
+        result=result,
+        ip=_client_ip(request),
+    )
+    return response
 
 
 # ── providers ──────────────────────────────────────────────────────────
@@ -331,6 +447,15 @@ async def test_provider(
     return response
 
 
+@router.get("/providers/{provider_id}/models")
+async def list_provider_models(
+    provider_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """US-7: return curated model list for the credential's provider."""
+    return await _proxy_json("GET", f"/v1/credentials/{provider_id}/models", user=current_user)
+
+
 # ── sessions ───────────────────────────────────────────────────────────
 
 
@@ -382,6 +507,66 @@ async def close_session(
         result="success" if response.status_code == 204 else "failure",
         ip=_client_ip(request),
     )
+    return response
+
+
+@router.post("/session/{session_id}/attachments")
+async def upload_attachment(
+    request: Request,
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """US-3: Forward multipart attachment to the plugin."""
+    content_type = request.headers.get("content-type", "")
+    if "multipart/form-data" not in content_type:
+        return JSONResponse(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            content={"error": "Expected multipart/form-data"},
+        )
+    return await _proxy_multipart(
+        f"/v1/session/{session_id}/attachments",
+        user=current_user,
+        sid=session_id,
+        raw_request=request,
+    )
+
+
+@router.get("/session/{session_id}/history")
+async def get_turn_history(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """P-1: Retrieve encrypted turn history for a session (opt-in feature)."""
+    return await _proxy_json(
+        "GET",
+        f"/v1/session/{session_id}/history",
+        user=current_user,
+        sid=session_id,
+    )
+
+
+@router.post("/session/{session_id}/context")
+async def inject_context(
+    request: Request,
+    session_id: str,
+    body: InjectContext,
+    current_user: dict = Depends(get_current_user),
+):
+    """V-1: Inject VANTAGE threat context into a session's system prompt."""
+    response = await _proxy_json(
+        "POST",
+        f"/v1/session/{session_id}/context",
+        user=current_user,
+        sid=session_id,
+        json=body.model_dump(exclude_none=True),
+    )
+    if response.status_code == 200 and body.analysisId:
+        await _audit(
+            current_user,
+            action="socc_context_injected",
+            target=f"{session_id}:{body.analysisId}",
+            ip=_client_ip(request),
+        )
     return response
 
 

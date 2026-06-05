@@ -16,12 +16,15 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import json as _json
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from audit import log_action
 from auth import get_current_user, require_role
+from config import settings
 from db import db_manager
 
 from services.extensions import (
@@ -60,7 +63,7 @@ def get_manager() -> ExtensionManager:
         _manager = ExtensionManager(
             db=db_manager.db,
             registry=_registry,
-            docker=DockerProxyClient(),
+            docker=DockerProxyClient(base_url=settings.docker_proxy_url),
         )
     return _manager
 
@@ -196,6 +199,13 @@ async def uninstall(
     mgr = get_manager()
     if not mgr._registry.get(ext_id):  # noqa: SLF001
         raise HTTPException(status_code=404, detail={"error": "not_found"})
+
+    # Pre-check state synchronously so the frontend gets immediate
+    # feedback instead of 202 + silent BackgroundTask failure.
+    try:
+        await mgr._guard_action(ext_id, "uninstall")  # noqa: SLF001
+    except LifecycleError as e:
+        raise _http_for_lifecycle_error(e) from e
 
     async def _run():
         try:
@@ -340,18 +350,28 @@ async def stream_logs(
     container_name = entry.manifest.health.url.split("//", 1)[-1].split(":", 1)[0]
     docker = mgr._docker  # noqa: SLF001
 
+    # Check container existence before opening the SSE stream.
+    try:
+        await docker.inspect_container(container_name)
+    except DockerProxyError as e:
+        if e.status == 404:
+            async def _not_found():
+                yield b'event: error\ndata: {"error":"container_not_found","message":"Extension not installed or container missing"}\n\n'
+            return StreamingResponse(
+                _not_found(), media_type="text/event-stream"
+            )
+        raise
+
     async def gen():
         try:
             async for chunk in docker.stream_logs(container_name, tail=tail, follow=True):
-                # Wrap raw bytes as a single SSE data frame so the client
-                # can iterate via EventSource / fetch-event-source.
                 yield b"event: log\ndata: " + chunk.replace(b"\n", b"\\n") + b"\n\n"
-        except DockerProxyError as e:
-            yield (
-                b'event: error\ndata: {"error":"logs_failed","message":'
-                + str(e).encode()
-                + b"}\n\n"
-            )
+        except Exception as e:
+            # Catch DockerProxyError, httpx.ConnectError, and any other unexpected
+            # error so they surface as an SSE error frame rather than crashing the
+            # response mid-stream and triggering a client reconnect loop.
+            payload = _json.dumps({"error": "logs_failed", "message": str(e)})
+            yield b"event: error\ndata: " + payload.encode() + b"\n\n"
 
     return StreamingResponse(
         gen(),

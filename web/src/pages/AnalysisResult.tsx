@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { MessageSquare, Loader2 } from "lucide-react";
+import API_URL from "../config";
 import { useLanguage } from "../context/LanguageContext";
 import type { SupportedLanguage } from "../lib/language";
 import { translate } from "../lib/i18n";
@@ -713,6 +715,7 @@ export default function AnalysisResult() {
   const [loading, setLoading] = useState(() => !peekAnalyzePayload<AnalyzePayload>(displayTarget, language));
   const [error, setError] = useState<string | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [launchingSocc, setLaunchingSocc] = useState(false);
 
   useEffect(() => {
     setReportLanguage(language);
@@ -862,6 +865,82 @@ export default function AnalysisResult() {
     }
   };
 
+  const analyzeWithSocc = async () => {
+    if (!payload || !displayTarget) return;
+    setLaunchingSocc(true);
+    try {
+      // Collect IOCs from payload
+      const ips: string[] = [];
+      const domains: string[] = [];
+      const hashes: string[] = [];
+
+      if (payload.results) {
+        for (const [, data] of Object.entries(payload.results)) {
+          if (typeof data === "object" && data !== null) {
+            const d = data as Record<string, any>;
+            if (d.ip_str) ips.push(d.ip_str);
+            if (d.ip) ips.push(d.ip);
+            if (d.data?.domain) domains.push(d.data.domain);
+          }
+        }
+      }
+
+      // Detect target type
+      const targetLooksLikeIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(displayTarget);
+      const targetLooksLikeHash = /^[a-fA-F0-9]{32,64}$/.test(displayTarget);
+      if (targetLooksLikeIp) ips.push(displayTarget);
+      else if (targetLooksLikeHash) hashes.push(displayTarget);
+      else domains.push(displayTarget);
+
+      const analysisId = `analyze:${encodeURIComponent(displayTarget)}`;
+
+      // Create a session and inject context
+      const providersRes = await fetch(`${API_URL}/api/socc/providers`, { credentials: "include" });
+      if (!providersRes.ok) {
+        navigate("/socc");
+        return;
+      }
+      const providersData = await providersRes.json();
+      const creds: any[] = providersData.credentials ?? [];
+      if (creds.length === 0) {
+        navigate("/socc");
+        return;
+      }
+
+      const sessionRes = await fetch(`${API_URL}/api/socc/session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ credentialId: creds[0].id, analysisId }),
+      });
+      if (!sessionRes.ok) {
+        navigate("/socc");
+        return;
+      }
+      const { sessionId } = await sessionRes.json();
+
+      // Inject context
+      await fetch(`${API_URL}/api/socc/session/${sessionId}/context`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          ips: ips.length ? [...new Set(ips)] : undefined,
+          domains: domains.length ? [...new Set(domains)] : undefined,
+          hashes: hashes.length ? [...new Set(hashes)] : undefined,
+          rawContext: payload.analysis_report ?? payload.analysis_sections?.map(s => s.body.join(" ")).join("\n"),
+          analysisId,
+        }),
+      });
+
+      navigate(`/socc?sessionId=${sessionId}`);
+    } catch {
+      navigate("/socc");
+    } finally {
+      setLaunchingSocc(false);
+    }
+  };
+
   useEffect(() => {
     function handleExportCurrentView() {
       if (!payload) return;
@@ -929,6 +1008,19 @@ export default function AnalysisResult() {
             onClick={exportJson}
           >
             {t("analysis.exportJson", "Export JSON")}
+          </button>
+          <button
+            className="btn btn-secondary flex items-center gap-2"
+            onClick={() => void analyzeWithSocc()}
+            disabled={launchingSocc || !payload}
+            title={t("analysis.analyzeWithSocc", "Analyze with SOC Copilot")}
+          >
+            {launchingSocc ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <MessageSquare className="w-4 h-4" />
+            )}
+            {t("analysis.analyzeWithSocc", "Analyze with SOCC")}
           </button>
           <button
             className="btn btn-primary"

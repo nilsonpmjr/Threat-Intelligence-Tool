@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Download, Filter, RefreshCw, Rss, ShieldAlert, X } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { ChevronLeft, ChevronRight, Download, Filter, MessageSquare, RefreshCw, Rss, ShieldAlert, X } from "lucide-react";
 import API_URL from "../config";
 import ModalShell from "../components/modal/ModalShell";
 import { PageHeader, PageToolbar, PageToolbarGroup } from "../components/page/PageChrome";
@@ -107,6 +107,7 @@ function formatPublishedAt(value: string | undefined, locale: string, t: (key: s
 
 export default function Feed() {
   const { t, locale } = useLanguage();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<FeedItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -299,6 +300,38 @@ export default function Feed() {
     anchor.download = `vantage-feed-page-${page}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function analyzeItemWithSocc(item: FeedItem) {
+    try {
+      const providersRes = await fetch(`${API_URL}/api/socc/providers`, { credentials: "include" });
+      if (!providersRes.ok) { navigate("/socc"); return; }
+      const { credentials: creds = [] } = await providersRes.json();
+      if (!creds.length) { navigate("/socc"); return; }
+
+      const sessionRes = await fetch(`${API_URL}/api/socc/session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ credentialId: creds[0].id, analysisId: `feed:${item._id}` }),
+      });
+      if (!sessionRes.ok) { navigate("/socc"); return; }
+      const { sessionId } = await sessionRes.json();
+
+      await fetch(`${API_URL}/api/socc/session/${sessionId}/context`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          rawContext: [item.title, item.summary].filter(Boolean).join("\n"),
+          analysisId: `feed:${item._id}`,
+        }),
+      });
+
+      navigate(`/socc?sessionId=${sessionId}`);
+    } catch {
+      navigate("/socc");
+    }
   }
 
   return (
@@ -509,14 +542,24 @@ export default function Feed() {
                     ))}
                   </div>
                 </div>
-                {item.data?.link && (
+                <div className="mt-4 flex items-center gap-3 flex-wrap">
+                  {item.data?.link && (
+                    <button
+                      onClick={() => window.open(item.data?.link, "_blank", "noopener")}
+                      className="text-left text-xs font-bold uppercase tracking-widest text-primary hover:underline"
+                    >
+                      {t("feed.openSourceReference", "Open source reference")}
+                    </button>
+                  )}
                   <button
-                    onClick={() => window.open(item.data?.link, "_blank", "noopener")}
-                    className="mt-4 text-left text-xs font-bold uppercase tracking-widest text-primary hover:underline"
+                    onClick={() => void analyzeItemWithSocc(item)}
+                    className="ml-auto flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors"
+                    title={t("feed.analyzeWithSocc", "Analyze with SOC Copilot")}
                   >
-                    {t("feed.openSourceReference", "Open source reference")}
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    {t("feed.analyzeWithSocc", "SOCC")}
                   </button>
-                )}
+                </div>
               </article>
             );
           })}

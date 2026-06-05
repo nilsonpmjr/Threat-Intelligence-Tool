@@ -192,13 +192,22 @@ class DockerProxyClient:
             ["compose", "-f", compose_path, "config"], capture_stdout=True
         )
 
+    def _docker_host(self) -> str:
+        """Convert the HTTP base URL to a DOCKER_HOST TCP address for the CLI."""
+        # "http://docker-socket-proxy:2375" → "tcp://docker-socket-proxy:2375"
+        return self._base.replace("http://", "tcp://", 1).replace("https://", "tcp://", 1)
+
     async def _compose(self, args: list[str], *, capture_stdout: bool = False) -> str:
         """Run `docker <args>` with DOCKER_HOST pointing at the proxy.
 
         We use asyncio.create_subprocess_exec so the orchestrator
         doesn't block while compose pulls images / waits on healthchecks.
+
+        A 60-second timeout guards against hanging subprocesses (e.g.
+        Docker CLI stuck on daemon connection); if hit, the process is
+        killed and DockerProxyError is raised.
         """
-        env = {"DOCKER_HOST": "tcp://docker-socket-proxy:2375"}
+        env = {"DOCKER_HOST": self._docker_host()}
         proc = await asyncio.create_subprocess_exec(
             "docker",
             *args,
@@ -206,7 +215,16 @@ class DockerProxyClient:
             stderr=subprocess.PIPE,
             env={**__import__("os").environ, **env},
         )
-        stdout, stderr = await proc.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=60.0
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise DockerProxyError(
+                f"docker {' '.join(args)} timed out after 60s"
+            )
         if proc.returncode != 0:
             raise DockerProxyError(
                 f"docker {' '.join(args)} exited {proc.returncode}: "
@@ -219,12 +237,13 @@ class DockerProxyClient:
     async def stream_logs(
         self, name_or_id: str, *, tail: int = 100, follow: bool = True
     ) -> AsyncIterator[bytes]:
-        """Async iterator of raw log bytes. Used by /api/extensions/:id/logs.
+        """Async iterator of decoded log lines. Used by /api/extensions/:id/logs.
 
-        Docker's log frame format mixes stdout/stderr with a 8-byte header
-        per chunk; the SSE handler in routers/extensions.py is responsible
-        for stripping the headers if needed. For the MVP we forward as-is
-        and let the frontend display raw text.
+        Docker's multiplexed log format prefixes each frame with an 8-byte header:
+          [stream_type(1)] [padding(3)] [size_big_endian(4)] [payload...]
+        We strip those headers so the SSE handler emits clean UTF-8 text.
+        When the container runs with a TTY (attach=true), there are no headers;
+        we detect this by checking whether byte 0 is a valid stream type (0-2).
         """
         params = {
             "stdout": "true",
@@ -234,17 +253,41 @@ class DockerProxyClient:
             "timestamps": "true",
         }
         url = f"{self._base}/containers/{name_or_id}/logs"
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(None, connect=5.0)
-        ) as client:
-            async with client.stream("GET", url, params=params) as resp:
-                if resp.status_code >= 400:
-                    body = await resp.aread()
-                    raise DockerProxyError(
-                        f"logs stream failed: {resp.status_code}",
-                        status=resp.status_code,
-                        body=body,
-                    )
-                async for chunk in resp.aiter_raw():
-                    if chunk:
-                        yield chunk
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(None, connect=5.0)
+            ) as client:
+                async with client.stream("GET", url, params=params) as resp:
+                    if resp.status_code >= 400:
+                        body = await resp.aread()
+                        raise DockerProxyError(
+                            f"logs stream failed: {resp.status_code}",
+                            status=resp.status_code,
+                            body=body,
+                        )
+                    buf = b""
+                    async for raw in resp.aiter_raw():
+                        if not raw:
+                            continue
+                        buf += raw
+                        # Parse as many complete frames as possible from the buffer
+                        while len(buf) >= 8:
+                            stream_type = buf[0]
+                            # If byte 0 is not a valid Docker stream type (0/1/2),
+                            # the container uses a TTY — emit the whole buffer as-is.
+                            if stream_type not in (0, 1, 2):
+                                yield buf
+                                buf = b""
+                                break
+                            frame_size = int.from_bytes(buf[4:8], "big")
+                            if len(buf) < 8 + frame_size:
+                                break  # wait for more data
+                            payload = buf[8 : 8 + frame_size]
+                            buf = buf[8 + frame_size :]
+                            if payload:
+                                yield payload
+                    # Flush any remaining bytes
+                    if buf:
+                        yield buf
+        except httpx.HTTPError as exc:
+            raise DockerProxyError(f"docker proxy unreachable for logs: {exc}") from exc

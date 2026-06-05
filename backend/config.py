@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     # rely on the plugin's own 90s TURN_TIMEOUT_MS (PRD §Security).
     socc_proxy_timeout_seconds: float = 30.0
 
+    # Extensions Platform — Docker socket proxy
+    # Exposed by the docker-socket-proxy container (alpine/socat) on port 2375.
+    # Override with DOCKER_PROXY_URL env var for non-standard deployments.
+    docker_proxy_url: str = "http://docker-socket-proxy:2375"
+
     # Recon Engine
     recon_cache_ttl_hours: int = 6
     recon_port_range: str = "21,22,23,25,53,80,110,111,135,139,143,443,445,993,995,1723,3306,3389,5900,8080,8443,8888"

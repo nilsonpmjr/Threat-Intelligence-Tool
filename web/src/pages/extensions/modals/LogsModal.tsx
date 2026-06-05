@@ -38,6 +38,7 @@ export default function LogsModal({ extensionId, extensionName, onClose }: LogsM
 
     void fetchEventSource(`${API_URL}/api/extensions/${extensionId}/logs`, {
       method: "GET",
+      credentials: "include",
       signal: controller.signal,
       headers: {
         "Accept": "text/event-stream",
@@ -47,22 +48,21 @@ export default function LogsModal({ extensionId, extensionName, onClose }: LogsM
           const rawData = ev.data.replace(/\\n/g, "\n");
           setLogs((prev) => {
             const next = [...prev, rawData];
-            // Limit to ~5000 lines to preserve memory as per prompt
             if (next.length > 5000) return next.slice(next.length - 5000);
             return next;
           });
         } else if (ev.event === "error") {
           try {
             const data = JSON.parse(ev.data);
-            setError(data.message || "Failed to stream logs");
+            setError(data.message || t("extensions.logs.failedToStream", "Failed to stream logs"));
           } catch {
-            setError("Unknown error in log stream");
+            setError(t("extensions.logs.unknownError", "Unknown error in log stream"));
           }
         }
       },
       onerror(err) {
         console.error("Log stream error:", err);
-        setError("Connection lost. Retrying...");
+        setError(t("extensions.logs.connectionLost", "Connection lost. Retrying..."));
       },
       openWhenHidden: true,
     });

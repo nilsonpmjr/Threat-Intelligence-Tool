@@ -60,6 +60,7 @@ const Notifications = lazy(() => import("./pages/Notifications"));
 const AnalysisResult = lazy(() => import("./pages/AnalysisResult"));
 const BatchAnalysis = lazy(() => import("./pages/BatchAnalysis"));
 const SoccChat = lazy(() => import("./pages/socc/SoccChat"));
+const SoccOAuthCallback = lazy(() => import("./pages/socc/SoccOAuthCallback"));
 const ShiftHandoff = lazy(() => import("./pages/ShiftHandoff"));
 const ShiftHandoffHistoryPage = lazy(async () => {
   const module = await import("./pages/ShiftHandoff");
@@ -143,9 +144,14 @@ export default function App() {
                   <Route path="api" element={suspense(<ApiReferencePage />)} />
                   <Route path="support" element={suspense(<ContactSupportPage />)} />
                 </Route>
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Route>
-            </Routes>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+            {/* Canonical OAuth callback — redirect_uri registered with Anthropic/OpenAI clients.
+                Must stay at /callback (exact path) to match http://localhost/callback. */}
+            <Route path="callback" element={<RequireAuth>{suspense(<SoccOAuthCallback />)}</RequireAuth>} />
+            {/* Legacy alias kept for backward compat with any stored state */}
+            <Route path="socc/oauth/callback" element={<RequireAuth>{suspense(<SoccOAuthCallback />)}</RequireAuth>} />
+          </Routes>
           </BrowserRouter>
         </LanguageProvider>
     </AuthProvider>

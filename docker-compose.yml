@@ -54,9 +54,12 @@ services:
       - .env
     environment:
       MONGO_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/admin?authSource=admin
-      CORS_ORIGINS: '["http://localhost","http://localhost:80","http://localhost:5173","http://localhost:3000"]'
+      CORS_ORIGINS: '["http://localhost","http://localhost:80","http://localhost:54321","http://localhost:5173","http://localhost:3000"]'
     networks:
       - vantage_internal
+    depends_on:
+      mongodb:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -69,23 +72,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-    depends_on:
-      mongodb:
-        condition: service_healthy
-
-  # Attach the backend to docker0 when the custom bridge does not provide
-  # outbound connectivity on this host/kernel combination.
-  backend-egress:
-    image: docker:cli
-    container_name: vantage_backend_egress
-    restart: "no"
-    profiles: [egress-workaround]
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    entrypoint: ["sh", "-c", "docker network connect bridge vantage_backend 2>/dev/null; echo egress-attached"]
-    depends_on:
-      backend:
-        condition: service_healthy
 
   frontend:
     build:
@@ -95,6 +81,10 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      # OAuth callback port — binds only to localhost so the Anthropic/OpenAI OAuth
+      # clients can redirect to http://localhost:54321/callback (RFC 8252 loopback URI).
+      # Port 80 is excluded by most OAuth servers; 54321 is in the ephemeral range.
+      - "127.0.0.1:54321:80"
     environment:
       API_UPSTREAM: http://backend:8000
     networks:

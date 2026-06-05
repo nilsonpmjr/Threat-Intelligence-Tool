@@ -480,7 +480,7 @@ async def security_headers(request: Request, call_next):
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self'; "
+        "script-src 'self' 'wasm-unsafe-eval'; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "img-src 'self' data: https:; "
         "font-src 'self' data: https://fonts.gstatic.com; "

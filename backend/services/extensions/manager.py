@@ -418,16 +418,31 @@ class ExtensionManager:
         entry = self._require(ext_id)
         h = entry.manifest.health
         timeout = httpx.Timeout(h.timeout_seconds)
+        ok = False
+        error_reason: str | None = None
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.get(h.url)
             ok = 200 <= resp.status_code < 300
-        except httpx.HTTPError:
-            ok = False
+            if not ok:
+                error_reason = f"health endpoint returned {resp.status_code}"
+        except httpx.ConnectError as exc:
+            error_reason = f"container unreachable: {exc}"
+        except httpx.TimeoutException:
+            error_reason = f"health check timed out after {h.timeout_seconds}s"
+        except httpx.HTTPError as exc:
+            error_reason = str(exc)
+
+        patch: dict = {"last_health_ts": datetime.now(timezone.utc)}
+        if not ok and error_reason:
+            patch["last_error"] = error_reason
+        elif ok:
+            patch["last_error"] = None  # clear stale error on recovery
+
         await self._set_status(
             ext_id,
             ExtensionStatus.INSTALLED_HEALTHY if ok else ExtensionStatus.INSTALLED_UNHEALTHY,
-            last_health_ts=datetime.now(timezone.utc),
+            **patch,
         )
         return ok
 
