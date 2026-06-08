@@ -15,6 +15,8 @@ export const TRANSLATIONS: Record<SupportedLanguage, TranslationTree> = {
         sessionError: "Ocorreu um erro na sessão.",
         retry: "Tentar de novo",
         tokenExpired: "Seu token OAuth expirou. Reconecte o provedor para continuar.",
+        sessionCrashed: "A sessão travou. Reinicie para continuar.",
+        restartSession: "Reiniciar sessão",
         attachFile: "Anexar arquivo",
       },
       providers: {
@@ -52,6 +54,14 @@ export const TRANSLATIONS: Record<SupportedLanguage, TranslationTree> = {
         unknownProvider: "Não foi possível determinar o provedor OAuth pelo estado.",
         exchangeFailed: "Falha na troca do código OAuth.",
         unexpectedError: "Erro inesperado durante a troca OAuth.",
+      },
+      prompts: {
+        triage: "Triar este IOC",
+        cve: "Explicar este CVE",
+        ttps: "Quais TTPs isto indica?",
+        log: "Resumir este log",
+        phishing: "Isto é phishing?",
+        payload: "Decodificar este payload",
       },
     },
     layout: {
@@ -1617,6 +1627,8 @@ export const TRANSLATIONS: Record<SupportedLanguage, TranslationTree> = {
         sessionError: "A session error occurred.",
         retry: "Try again",
         tokenExpired: "Your OAuth token expired. Reconnect the provider to continue.",
+        sessionCrashed: "The session crashed. Restart to continue.",
+        restartSession: "Restart session",
         attachFile: "Attach file",
       },
       providers: {
@@ -1654,6 +1666,14 @@ export const TRANSLATIONS: Record<SupportedLanguage, TranslationTree> = {
         unknownProvider: "Could not determine OAuth provider from state.",
         exchangeFailed: "OAuth code exchange failed.",
         unexpectedError: "Unexpected error during OAuth exchange.",
+      },
+      prompts: {
+        triage: "Triage this IOC",
+        cve: "Explain this CVE",
+        ttps: "What TTPs does this indicate?",
+        log: "Summarize this log",
+        phishing: "Is this phishing?",
+        payload: "Decode this payload",
       },
     },
     layout: {
@@ -3203,6 +3223,8 @@ export const TRANSLATIONS: Record<SupportedLanguage, TranslationTree> = {
         sessionError: "Ocurrió un error en la sesión.",
         retry: "Intentar de nuevo",
         tokenExpired: "Su token OAuth expiró. Reconecte el proveedor para continuar.",
+        sessionCrashed: "La sesión se bloqueó. Reinicie para continuar.",
+        restartSession: "Reiniciar sesión",
         attachFile: "Adjuntar archivo",
       },
       providers: {
@@ -3240,6 +3262,14 @@ export const TRANSLATIONS: Record<SupportedLanguage, TranslationTree> = {
         unknownProvider: "No se pudo determinar el proveedor OAuth desde el estado.",
         exchangeFailed: "Error en el intercambio de código OAuth.",
         unexpectedError: "Error inesperado durante el intercambio OAuth.",
+      },
+      prompts: {
+        triage: "Triar este IOC",
+        cve: "Explicar este CVE",
+        ttps: "¿Qué TTPs indica esto?",
+        log: "Resumir este log",
+        phishing: "¿Esto es phishing?",
+        payload: "Decodificar este payload",
       },
     },
     layout: {

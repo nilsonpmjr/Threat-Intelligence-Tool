@@ -150,6 +150,7 @@ export default function SoccChat() {
 
   const [errorToast, setErrorToast] = useState<string | null>(null);
   const [rateLimited, setRateLimited] = useState(false);
+  const [crashedSession, setCrashedSession] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
 
@@ -272,27 +273,43 @@ export default function SoccChat() {
     loadModelsForCred(firstCred.id);
   }
 
+  async function createSessionWith(credentialId: string, model: string) {
+    const body: Record<string, string> = { credentialId };
+    if (model) body.modelOverride = model;
+    const res = await fetch(`${API_URL}/api/socc/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setSessions((prev) => [
+        { id: data.sessionId, createdAt: new Date().toISOString(), promptCount: 0 },
+        ...prev,
+      ]);
+      setActiveSessionId(data.sessionId);
+      setActiveModel(model || null);
+      setMessages([]);
+      setCrashedSession(false);
+      setErrorToast(null);
+    }
+  }
+
   async function startSession() {
     setShowNewSessionPicker(false);
     try {
-      const body: Record<string, string> = { credentialId: pickerCredId };
-      if (pickerModel) body.modelOverride = pickerModel;
-      const res = await fetch(`${API_URL}/api/socc/session`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(body),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setSessions((prev) => [
-          { id: data.sessionId, createdAt: new Date().toISOString(), promptCount: 0 },
-          ...prev,
-        ]);
-        setActiveSessionId(data.sessionId);
-        setActiveModel(pickerModel || null);
-        setMessages([]);
-      }
+      await createSessionWith(pickerCredId, pickerModel);
+    } catch {}
+  }
+
+  // R-5: after a worker crash, spin up a fresh session reusing the same
+  // credential/model so the analyst can continue without re-picking.
+  async function restartSession() {
+    const credId = pickerCredId || credentials[0]?.id;
+    if (!credId) { openNewSessionPicker(); return; }
+    try {
+      await createSessionWith(credId, activeModel || pickerModel);
     } catch {}
   }
 
@@ -314,6 +331,7 @@ export default function SoccChat() {
     setPendingAttachments([]);
     setErrorToast(null);
     setRateLimited(false);
+    setCrashedSession(false);
 
     const userMsgId = Date.now().toString();
     setMessages((prev) => [...prev, { id: userMsgId, role: "user", text }]);
@@ -348,6 +366,9 @@ export default function SoccChat() {
               } else if (data.code === "provider_unavailable" && data.reason === "token_expired") {
                 setErrorToast(t("socc.chat.tokenExpired", "OAuth token expired. Reconnect the provider."));
                 setProvidersModalOpen(true);
+              } else if (data.code === "session_worker_crashed") {
+                setCrashedSession(true);
+                setErrorToast(t("socc.chat.sessionCrashed", "The session crashed. Restart to continue."));
               } else {
                 setErrorToast(data.message || t("socc.chat.sessionError", "A session error occurred."));
               }
@@ -579,7 +600,7 @@ export default function SoccChat() {
           {sessions.map((s) => (
             <button
               key={s.id}
-              onClick={() => { setActiveSessionId(s.id); setMessages([]); setActiveModel(null); }}
+              onClick={() => { setActiveSessionId(s.id); setMessages([]); setActiveModel(null); setCrashedSession(false); setErrorToast(null); }}
               className={`w-full text-left px-3 py-2 rounded-sm text-sm transition-colors flex items-center gap-2 ${
                 activeSessionId === s.id
                   ? "bg-primary/10 text-primary border-l-2 border-primary"
@@ -714,6 +735,14 @@ export default function SoccChat() {
                     <div className="bg-error/10 border border-error/20 text-error px-4 py-2 rounded-sm text-xs flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4" />
                       {errorToast}
+                      {crashedSession && (
+                        <button
+                          className="btn btn-sm btn-error ml-2 text-xs"
+                          onClick={restartSession}
+                        >
+                          {t("socc.chat.restartSession", "Restart session")}
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}

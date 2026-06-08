@@ -617,3 +617,43 @@ async def send_message(
         sid=session_id,
         json=body.model_dump(),
     )
+
+
+# ── LGPD: portability + erasure ────────────────────────────────────────
+
+
+@router.get("/export")
+async def export_data(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """LGPD portability — return the user's socc data (keys masked)."""
+    await _audit(
+        current_user,
+        action="socc_data_exported",
+        target=current_user["username"],
+        ip=_client_ip(request),
+    )
+    return await _proxy_json("GET", "/v1/data/export", user=current_user)
+
+
+async def purge_user_socc_data(username: str) -> bool:
+    """LGPD erasure hook — delete all socc data for a user in the plugin.
+
+    Invoked from the user lifecycle (deactivate/delete) in users.py. It must
+    never raise: a plugin that is down or not installed must not block the
+    user operation. Returns True only when the plugin confirmed deletion.
+    """
+    if not settings.socc_internal_secret:
+        return False
+    try:
+        token = _mint_internal_jwt(sub=username)
+        headers = {"Authorization": f"Bearer {token}"}
+        url = _build_proxy_url("/v1/data")
+        timeout = httpx.Timeout(settings.socc_proxy_timeout_seconds)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.request("DELETE", url, headers=headers)
+        return resp.status_code == 200
+    except Exception:
+        logger.warning("socc data purge failed for user=%s", username, exc_info=True)
+        return False

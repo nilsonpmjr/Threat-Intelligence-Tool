@@ -18,6 +18,7 @@ from identity import (
     normalize_email,
 )
 from session_revocation import revoke_user_refresh_tokens, is_sensitive_role_downgrade
+from routers.socc import purge_user_socc_data
 
 logger = get_logger("UsersRouter")
 
@@ -334,10 +335,14 @@ async def delete_user(request: Request, username: str, current_user: dict = Depe
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # LGPD erasure — purge the user's SOC Copilot data (provider keys, sessions,
+    # history) in the plugin. Never blocks the delete if the plugin is down.
+    socc_purged = await purge_user_socc_data(username)
+
     ip = request.client.host if request.client else ""
     await log_action(db, user=current_user["username"], action="user_deleted",
                      target=username, ip=ip, result="success",
-                     detail=f"revoked_sessions={revoked_count}")
+                     detail=f"revoked_sessions={revoked_count}; socc_purged={socc_purged}")
     return {"status": "success", "message": f"User {username} deleted successfully"}
 
 
@@ -435,6 +440,12 @@ async def update_user(
     await db.users.update_one({"username": username}, {"$set": update_data})
     revoked_count = await revoke_user_refresh_tokens(db, username) if revoke_sessions else 0
 
+    # LGPD erasure on deactivation — a suspended user's stored provider keys and
+    # chat data should not linger. Purge the plugin's socc data for this user.
+    socc_purged = None
+    if update_data.get("is_active") is False:
+        socc_purged = await purge_user_socc_data(username)
+
     ip = request.client.host if request.client else ""
     # Emit granular audit events
     if "role" in update_data:
@@ -448,8 +459,10 @@ async def update_user(
     if "is_active" in update_data:
         action_name = "user_reactivated" if update_data["is_active"] else "user_suspended"
         detail = f"revoked_sessions={revoked_count}"
-        if update_data["is_active"] is False and update_data.get("suspension_reason"):
-            detail += f"; reason={update_data['suspension_reason']}"
+        if update_data["is_active"] is False:
+            detail += f"; socc_purged={socc_purged}"
+            if update_data.get("suspension_reason"):
+                detail += f"; reason={update_data['suspension_reason']}"
         await log_action(db, user=current_user["username"], action=action_name,
                          target=username, ip=ip, result="success",
                          detail=detail)
