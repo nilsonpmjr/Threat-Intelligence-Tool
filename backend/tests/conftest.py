@@ -437,6 +437,12 @@ async def async_client(fake_db, monkeypatch):
     from db import db_manager
     monkeypatch.setattr(db_manager, "db", fake_db)
     monkeypatch.setattr(app_state, "APP_INITIALIZED", True)
+    # The extensions manager is a lazily-cached module singleton that captures
+    # db_manager.db at first creation. Reset it per test so it rebinds to this
+    # test's fake_db instead of leaking a stale db from an earlier test.
+    import routers.extensions as _ext
+    monkeypatch.setattr(_ext, "_manager", None)
+    monkeypatch.setattr(_ext, "_registry", None)
 
     async with AsyncClient(
         transport=ASGITransport(app=app),

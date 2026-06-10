@@ -259,3 +259,74 @@ async def test_unreachable_plugin_returns_socc_unavailable(
     )
     assert res.status_code == 503
     assert res.json()["error"] == "socc_unavailable"
+
+
+# ── LGPD: portability (export) + erasure (purge) ───────────────────────
+
+
+@pytest.mark.asyncio
+async def test_export_proxies_to_plugin(async_client, tech_token, monkeypatch):
+    """LGPD portability: GET /api/socc/export forwards to the plugin's
+    /v1/data/export with a freshly minted scope=socc JWT for the caller and
+    returns the (key-masked) export unchanged."""
+    rec = _CallRecorder()
+    export_body = {
+        "exportedAt": "2026-06-07T00:00:00Z",
+        "userId": "techuser",
+        "credentials": [{"id": "c1", "provider": "anthropic", "label": "x"}],
+        "sessions": [],
+        "turns": [],
+    }
+    _patch_async_client_request(monkeypatch, rec, _FakeResponse(200, export_body))
+
+    res = await async_client.get("/api/socc/export", headers=_auth_headers(tech_token))
+    assert res.status_code == 200
+    assert res.json()["userId"] == "techuser"
+    # Export must never carry secret material.
+    assert "encryptedToken" not in res.text
+
+    call = rec.last()
+    assert call["method"] == "GET"
+    assert call["url"].endswith("/v1/data/export")
+    claims = _decode_jwt(call["headers"]["Authorization"].removeprefix("Bearer "))
+    assert claims["sub"] == "techuser"
+    assert claims["scope"] == "socc"
+
+
+@pytest.mark.asyncio
+async def test_purge_user_socc_data_deletes_via_plugin(monkeypatch):
+    """LGPD erasure: purge_user_socc_data mints a JWT for the target user and
+    issues DELETE /v1/data, returning True when the plugin confirms."""
+    from routers.socc import purge_user_socc_data
+
+    rec = _CallRecorder()
+    _patch_async_client_request(monkeypatch, rec, _FakeResponse(200, {"ok": True}))
+
+    ok = await purge_user_socc_data("victim")
+    assert ok is True
+
+    call = rec.last()
+    assert call["method"] == "DELETE"
+    assert call["url"].endswith("/v1/data")
+    claims = _decode_jwt(call["headers"]["Authorization"].removeprefix("Bearer "))
+    assert claims["sub"] == "victim"
+
+
+@pytest.mark.asyncio
+async def test_purge_user_socc_data_tolerates_unreachable_plugin(monkeypatch):
+    """A plugin that is down must NOT break the user lifecycle — purge returns
+    False instead of raising."""
+    from routers.socc import purge_user_socc_data
+
+    original = httpx.AsyncClient.request
+    plugin_base = settings.socc_plugin_url.rstrip("/")
+
+    async def boom(self, method, url, *, headers=None, json=None, **kwargs):
+        if str(url).startswith(plugin_base):
+            raise httpx.ConnectError("down", request=httpx.Request(method, url))
+        return await original(self, method, url, headers=headers, json=json, **kwargs)
+
+    monkeypatch.setattr(httpx.AsyncClient, "request", boom)
+
+    ok = await purge_user_socc_data("victim")
+    assert ok is False
