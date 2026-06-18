@@ -28,6 +28,7 @@ import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import API_URL from "../config";
 import { canAccessPath } from "../lib/access";
+import { useExtensionEnabled } from "../hooks/useExtensionEnabled";
 import { getShortcutSequenceMap, SHORTCUT_SEQUENCE_TIMEOUT_MS } from "../lib/shortcuts";
 import {
   buildNavigationSearchEntries,
@@ -93,7 +94,14 @@ export default function Layout() {
     return "identity";
   }, [location.search]);
 
-  const visibleNavItems = rootNavItems;
+  // SOC Copilot is a managed extension — keep it out of the sidebar while
+  // the extension is disabled (stopped/not installed) so we never link to a
+  // surface the user can't actually use.
+  const { enabled: isSoccEnabled } = useExtensionEnabled("socc");
+  const visibleNavItems = useMemo(
+    () => rootNavItems.filter((item) => item.path !== "/socc" || isSoccEnabled),
+    [isSoccEnabled],
+  );
 
   const settingsNavItems = useMemo(
     () => [
